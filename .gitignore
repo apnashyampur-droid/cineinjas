@@ -36,6 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# large video files
+/protected-media/
+/public/trailer-full.mp4
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
