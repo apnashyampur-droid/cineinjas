@@ -608,8 +608,7 @@ const openMovie = async () => {
       ========================================================= */}
 
       <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-[64px] min-h-[64px] max-w-[1400px] items-center justify-between px-4 sm:h-[72px] sm:px-8 lg:px-10">
-
+      <div className="mx-auto flex h-[64px] min-h-[64px] max-w-[1400px] items-center px-4 sm:h-[72px] sm:px-8 lg:px-10">
           <a
             href="#home"
             onClick={() => {
@@ -692,21 +691,59 @@ const openMovie = async () => {
 
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              setMenuOpen((prev) => !prev);
-              setSearchOpen(false);
-            }}
-            aria-label={
-              menuOpen
-                ? "Close navigation menu"
-                : "Open navigation menu"
-            }
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 md:hidden"
-          >
-            {menuOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+                   {/* MOBILE NAV CONTROLS */}
+
+          <div className="flex items-center gap-2 md:hidden">
+
+            {/* MENU — LEFT SIDE */}
+
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen((prev) => !prev);
+                setSearchOpen(false);
+              }}
+              aria-label={
+                menuOpen
+                  ? "Close navigation menu"
+                  : "Open navigation menu"
+              }
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 transition hover:bg-white/10"
+            >
+              {menuOpen ? (
+                <X size={20} />
+              ) : (
+                <Menu size={20} />
+              )}
+            </button>
+
+            {/* SEARCH — RIGHT SIDE */}
+
+            <button
+              type="button"
+              aria-label={
+                searchOpen
+                  ? "Close movie search"
+                  : "Search movies"
+              }
+              onClick={() => {
+                setSearchOpen((prev) => !prev);
+                setMenuOpen(false);
+              }}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border transition ${
+                searchOpen
+                  ? "border-white/25 bg-white/10"
+                  : "border-white/10 bg-white/5 hover:bg-white/10"
+              }`}
+            >
+              {searchOpen ? (
+                <X size={18} />
+              ) : (
+                <Search size={18} />
+              )}
+            </button>
+
+          </div>
         </div>
 
         {/* SEARCH */}
