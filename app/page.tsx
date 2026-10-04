@@ -44,18 +44,18 @@ export default function Home() {
   const [trailerOpen, setTrailerOpen] = useState(false);
 
   const [movieUnlocked, setMovieUnlocked] = useState(false);
-const [checkingPurchase, setCheckingPurchase] = useState(true);
-const [paymentLoading, setPaymentLoading] = useState(false);
-const [movieOpen, setMovieOpen] = useState(false);
-const [movieUrl, setMovieUrl] = useState<string | null>(null);
-const [trailerUrl, setTrailerUrl] = useState<string | null>(null);
-const [movieLoading, setMovieLoading] = useState(false);
+  const [checkingPurchase, setCheckingPurchase] = useState(true);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [movieOpen, setMovieOpen] = useState(false);
+  const [movieUrl, setMovieUrl] = useState<string | null>(null);
+  const [trailerUrl, setTrailerUrl] = useState<string | null>(null);
+  const [movieLoading, setMovieLoading] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const heroVideoRef = useRef<HTMLVideoElement>(null);
   const trailerVideoRef = useRef<HTMLVideoElement>(null);
 
-    /* =========================================================
+  /* =========================================================
      AUTH
   ========================================================= */
 
@@ -115,7 +115,8 @@ const [movieLoading, setMovieLoading] = useState(false);
 
       const script = document.createElement("script");
 
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.src =
+        "https://checkout.razorpay.com/v1/checkout.js";
       script.async = true;
 
       script.onload = () => resolve(true);
@@ -164,31 +165,35 @@ const [movieLoading, setMovieLoading] = useState(false);
     checkMoviePurchase();
   }, []);
 
+  /* =========================================================
+     LOAD TRAILER
+  ========================================================= */
+
   useEffect(() => {
-  const loadTrailer = async () => {
-    try {
-      const response = await fetch("/api/trailer", {
-        method: "GET",
-        cache: "no-store",
-      });
+    const loadTrailer = async () => {
+      try {
+        const response = await fetch("/api/trailer", {
+          method: "GET",
+          cache: "no-store",
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (!response.ok || !data.url) {
-        throw new Error(
-          data?.error || "Unable to load trailer."
-        );
+        if (!response.ok || !data.url) {
+          throw new Error(
+            data?.error || "Unable to load trailer."
+          );
+        }
+
+        setTrailerUrl(data.url);
+      } catch (error) {
+        console.error("Trailer loading error:", error);
+        setTrailerUrl(null);
       }
+    };
 
-      setTrailerUrl(data.url);
-    } catch (error) {
-      console.error("Trailer loading error:", error);
-      setTrailerUrl(null);
-    }
-  };
-
-  loadTrailer();
-}, []);
+    loadTrailer();
+  }, []);
 
   /* =========================================================
      SEARCH AUTO FOCUS
@@ -281,10 +286,12 @@ const [movieLoading, setMovieLoading] = useState(false);
     setMenuOpen(false);
 
     setTimeout(() => {
-      document.getElementById("search-results-anchor")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
+      document
+        .getElementById("search-results-anchor")
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
     }, 120);
   };
 
@@ -341,51 +348,52 @@ const [movieLoading, setMovieLoading] = useState(false);
      OPEN UNLOCKED MOVIE
   ========================================================= */
 
-const openMovie = async () => {
-  if (!movieUnlocked) return;
+  const openMovie = async () => {
+    if (!movieUnlocked) return;
 
-  setMenuOpen(false);
-  setSearchOpen(false);
-  setTrailerOpen(false);
-  setMovieLoading(true);
+    setMenuOpen(false);
+    setSearchOpen(false);
+    setTrailerOpen(false);
+    setMovieLoading(true);
 
-  try {
-    const response = await fetch("/api/movies/stream", {
-      method: "GET",
-      credentials: "include",
-      cache: "no-store",
-    });
+    try {
+      const response = await fetch("/api/movies/stream", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok || !data.url) {
-      throw new Error(
-        data?.error || "Unable to start secure movie playback."
+      if (!response.ok || !data.url) {
+        throw new Error(
+          data?.error ||
+            "Unable to start secure movie playback."
+        );
+      }
+
+      setMovieUrl(data.url);
+      setMovieOpen(true);
+
+      setTimeout(() => {
+        const video = document.getElementById(
+          "full-movie-video"
+        ) as HTMLVideoElement | null;
+
+        video?.play().catch(() => {});
+      }, 200);
+    } catch (error) {
+      console.error("Movie playback error:", error);
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to open the movie."
       );
+    } finally {
+      setMovieLoading(false);
     }
-
-    setMovieUrl(data.url);
-    setMovieOpen(true);
-
-    setTimeout(() => {
-      const video = document.getElementById(
-        "full-movie-video"
-      ) as HTMLVideoElement | null;
-
-      video?.play().catch(() => {});
-    }, 200);
-  } catch (error) {
-    console.error("Movie playback error:", error);
-
-    alert(
-      error instanceof Error
-        ? error.message
-        : "Unable to open the movie."
-    );
-  } finally {
-    setMovieLoading(false);
-  }
-};
+  };
 
   const closeMovie = () => {
     const video = document.getElementById(
@@ -411,7 +419,6 @@ const openMovie = async () => {
   const handleFullMovieClick = async () => {
     if (checkingPurchase || paymentLoading) return;
 
-    /* Already purchased */
     if (movieUnlocked) {
       openMovie();
       return;
@@ -420,10 +427,6 @@ const openMovie = async () => {
     setPaymentLoading(true);
 
     try {
-      /*
-       * Load Razorpay Checkout.
-       */
-
       const razorpayLoaded = await loadRazorpay();
 
       if (!razorpayLoaded) {
@@ -434,35 +437,28 @@ const openMovie = async () => {
         return;
       }
 
-      /*
-       * Create order on SERVER.
-       *
-       * IMPORTANT:
-       * Price is decided by backend.
-       */
-
-      const orderResponse = await fetch("/api/movies/create-order", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          movieId: MOVIE_ID,
-        }),
-      });
+      const orderResponse = await fetch(
+        "/api/movies/create-order",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            movieId: MOVIE_ID,
+          }),
+        }
+      );
 
       const orderData = await orderResponse.json();
 
       if (!orderResponse.ok) {
         throw new Error(
-          orderData?.error || "Unable to create payment order."
+          orderData?.error ||
+            "Unable to create payment order."
         );
       }
-
-      /*
-       * Open Razorpay.
-       */
 
       const options = {
         key: orderData.keyId,
@@ -493,13 +489,6 @@ const openMovie = async () => {
           razorpay_signature: string;
         }) => {
           try {
-            /*
-             * Verify payment on SERVER.
-             *
-             * Only after successful server verification
-             * will the movie be unlocked.
-             */
-
             const verifyResponse = await fetch(
               "/api/movies/verify-payment",
               {
@@ -520,18 +509,18 @@ const openMovie = async () => {
               }
             );
 
-            const verifyData = await verifyResponse.json();
+            const verifyData =
+              await verifyResponse.json();
 
-            if (!verifyResponse.ok || !verifyData.success) {
+            if (
+              !verifyResponse.ok ||
+              !verifyData.success
+            ) {
               throw new Error(
                 verifyData?.error ||
                   "Payment verification failed."
               );
             }
-
-            /*
-             * Permanent unlock is now stored on server.
-             */
 
             setMovieUnlocked(true);
 
@@ -541,7 +530,10 @@ const openMovie = async () => {
 
             openMovie();
           } catch (error) {
-            console.error("Payment verification error:", error);
+            console.error(
+              "Payment verification error:",
+              error
+            );
 
             alert(
               "Payment was received, but verification is still pending. Please refresh and check your movie access."
@@ -592,23 +584,48 @@ const openMovie = async () => {
   ========================================================= */
 
   const fullMovieButtonLabel = checkingPurchase
-  ? "Checking access..."
-  : paymentLoading
-  ? "Opening secure payment..."
-  : movieLoading
-  ? "Opening secure movie..."
-  : movieUnlocked
-  ? "Watch Full Movie"
-  : "Watch Full Movie · ₹19";
+    ? "Checking access..."
+    : paymentLoading
+    ? "Opening secure payment..."
+    : movieLoading
+    ? "Opening secure movie..."
+    : movieUnlocked
+    ? "Watch Full Movie"
+    : "Watch Full Movie · ₹19";
 
   return (
     <main className="min-h-[100svh] overflow-x-hidden bg-[#080808] text-white">
+
       {/* =========================================================
           NAVBAR
       ========================================================= */}
 
       <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-xl">
-        <div className="mx-auto flex h-[64px] min-h-[64px] max-w-[1400px] items-center justify-between px-4 sm:h-[72px] sm:px-8 lg:px-10">
+        <div className="mx-auto flex h-[64px] min-h-[64px] max-w-[1400px] items-center px-4 sm:h-[72px] sm:px-8 lg:px-10 md:justify-between">
+
+          {/* MOBILE MENU — LEFT */}
+
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen((prev) => !prev);
+              setSearchOpen(false);
+            }}
+            aria-label={
+              menuOpen
+                ? "Close navigation menu"
+                : "Open navigation menu"
+            }
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 transition hover:bg-white/10 md:hidden"
+          >
+            {menuOpen ? (
+              <X size={20} />
+            ) : (
+              <Menu size={20} />
+            )}
+          </button>
+
+          {/* LOGO */}
 
           <a
             href="#home"
@@ -616,18 +633,23 @@ const openMovie = async () => {
               setMenuOpen(false);
               closeSearch();
             }}
-            className="flex shrink-0 items-center gap-2"
+            className="ml-2 flex shrink-0 items-center gap-2 md:ml-0"
           >
-        <img
-  src="/CINEINJAS.png"
-  alt="CINEINJAS"
-  className="h-9 w-9 rounded-full object-cover sm:h-10 sm:w-10"
-/>
+            <img
+              src="/CINEINJAS.png"
+              alt="CINEINJAS"
+              className="h-9 w-9 rounded-full object-cover sm:h-10 sm:w-10"
+            />
 
             <span className="text-lg font-bold tracking-tight sm:text-xl">
-              CINE<span className="text-white/40">INJAS</span>
+              CINE
+              <span className="text-white/40">
+                INJAS
+              </span>
             </span>
           </a>
+
+          {/* DESKTOP NAV */}
 
           <nav className="hidden items-center gap-8 text-sm text-white/65 md:flex">
             <a
@@ -659,6 +681,8 @@ const openMovie = async () => {
             </a>
           </nav>
 
+          {/* DESKTOP ACTIONS */}
+
           <div className="hidden items-center gap-3 md:flex">
             <button
               type="button"
@@ -677,35 +701,56 @@ const openMovie = async () => {
                   : "border-white/10 bg-white/5 hover:bg-white/10"
               }`}
             >
-              {searchOpen ? <X size={18} /> : <Search size={18} />}
+              {searchOpen ? (
+                <X size={18} />
+              ) : (
+                <Search size={18} />
+              )}
             </button>
 
-       <button
-  type="button"
-  onClick={() => router.push(user ? "/profile" : "/sign-in")}
-  disabled={authLoading}
-  className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm transition hover:bg-white/10 disabled:opacity-60"
->
-  <User size={16} />
-  {authLoading ? "..." : user ? "Profile" : "Sign In"}
-</button>
-
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  user ? "/profile" : "/sign-in"
+                )
+              }
+              disabled={authLoading}
+              className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm transition hover:bg-white/10 disabled:opacity-60"
+            >
+              <User size={16} />
+              {authLoading
+                ? "..."
+                : user
+                ? "Profile"
+                : "Sign In"}
+            </button>
           </div>
+
+          {/* MOBILE SEARCH — RIGHT */}
 
           <button
             type="button"
-            onClick={() => {
-              setMenuOpen((prev) => !prev);
-              setSearchOpen(false);
-            }}
             aria-label={
-              menuOpen
-                ? "Close navigation menu"
-                : "Open navigation menu"
+              searchOpen
+                ? "Close movie search"
+                : "Search movies"
             }
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 md:hidden"
+            onClick={() => {
+              setSearchOpen((prev) => !prev);
+              setMenuOpen(false);
+            }}
+            className={`ml-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition md:hidden ${
+              searchOpen
+                ? "border-white/25 bg-white/10"
+                : "border-white/10 bg-white/5 hover:bg-white/10"
+            }`}
           >
-            {menuOpen ? <X size={20} /> : <Menu size={20} />}
+            {searchOpen ? (
+              <X size={18} />
+            ) : (
+              <Search size={18} />
+            )}
           </button>
         </div>
 
@@ -724,7 +769,9 @@ const openMovie = async () => {
                   ref={searchInputRef}
                   value={searchQuery}
                   onChange={(event) =>
-                    setSearchQuery(event.target.value)
+                    setSearchQuery(
+                      event.target.value
+                    )
                   }
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
@@ -795,11 +842,16 @@ const openMovie = async () => {
 
                           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/35">
                             <span className="flex items-center gap-1">
-                              <Star size={12} fill="currentColor" />
+                              <Star
+                                size={12}
+                                fill="currentColor"
+                              />
                               4.3
                             </span>
 
-                            <span>28K+ views</span>
+                            <span>
+                              28K+ views
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -825,8 +877,9 @@ const openMovie = async () => {
                           </p>
 
                           <p className="mt-1 text-xs leading-5 text-white/35">
-                            No movie matching “{searchQuery}” is
-                            currently available on CINEINJAS.
+                            No movie matching “
+                            {searchQuery}” is currently
+                            available on CINEINJAS.
                           </p>
                         </div>
                       </div>
@@ -892,18 +945,25 @@ const openMovie = async () => {
                 Search Movies
               </button>
 
-            <button
-  type="button"
-  onClick={() => {
-    setMenuOpen(false);
-    router.push(user ? "/profile" : "/sign-in");
-  }}
-  disabled={authLoading}
-  className="mt-1 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white py-3 font-medium text-black disabled:opacity-60"
->
-  <User size={17} />
-  {authLoading ? "..." : user ? "Profile" : "Sign In"}
-</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  router.push(
+                    user ? "/profile" : "/sign-in"
+                  );
+                }}
+                disabled={authLoading}
+                className="mt-1 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white py-3 font-medium text-black disabled:opacity-60"
+              >
+                <User size={17} />
+
+                {authLoading
+                  ? "..."
+                  : user
+                  ? "Profile"
+                  : "Sign In"}
+              </button>
             </nav>
           </div>
         )}
@@ -915,12 +975,13 @@ const openMovie = async () => {
 
       <section
         id="home"
-        className="relative flex min-h-[720px] items-end overflow-hidden pt-[64px] sm:min-h-[790px] sm:pt-[72px]"
+        className="relative flex min-h-[650px] items-end overflow-hidden pt-[64px] sm:min-h-[790px] sm:pt-[72px]"
       >
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 bg-black">
+
           <video
             ref={heroVideoRef}
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-contain sm:object-cover"
             src="/trailer.mp4"
             autoPlay
             muted
@@ -941,7 +1002,7 @@ const openMovie = async () => {
           <div className="absolute right-[12%] top-[25%] h-[280px] w-[280px] rounded-full bg-red-500/[0.04] blur-3xl" />
         </div>
 
-        <div className="relative z-10 mx-auto w-full max-w-[1400px] px-4 pb-12 sm:px-8 sm:pb-20 lg:px-10 lg:pb-28">
+        <div className="relative z-10 mx-auto w-full max-w-[1400px] px-4 pb-10 sm:px-8 sm:pb-20 lg:px-10 lg:pb-28">
           <div className="max-w-[900px]">
 
             <div className="mb-5 flex flex-wrap items-center gap-2.5 text-[10px] font-medium uppercase tracking-[0.18em] text-white/55 sm:gap-3 sm:text-xs sm:tracking-[0.22em]">
@@ -959,13 +1020,17 @@ const openMovie = async () => {
             <h1 className="text-[2.9rem] font-semibold leading-[0.92] tracking-[-0.055em] sm:text-6xl lg:text-8xl">
               AVENGERS:
               <br />
-              <span className="text-white/45">DOOMSDAY</span>
+              <span className="text-white/45">
+                DOOMSDAY
+              </span>
             </h1>
 
             <p className="mt-6 max-w-[700px] text-[15px] leading-7 text-white/60 sm:mt-7 sm:text-lg">
-              Beloved heroes from three distinct universes are set on a
-              deadly collision course as they face an existential threat
-              unlike anything they have ever encountered.
+              Beloved heroes from three distinct
+              universes are set on a deadly collision
+              course as they face an existential threat
+              unlike anything they have ever
+              encountered.
             </p>
 
             <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3 text-xs text-white/60 sm:mt-7 sm:gap-x-5 sm:text-sm">
@@ -995,25 +1060,28 @@ const openMovie = async () => {
 
             <div className="mt-8 grid max-w-[650px] gap-3 sm:mt-9 sm:grid-cols-2">
 
-              {/* TRAILER */}
-
               <button
                 type="button"
                 onClick={openTrailer}
                 className="group flex min-h-14 items-center justify-center gap-3 rounded-xl border border-white/15 bg-white/[0.07] px-5 font-semibold backdrop-blur transition hover:border-white/25 hover:bg-white/[0.12] active:bg-white/[0.16] sm:px-7"
               >
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-black transition group-hover:scale-105">
-                  <Play size={15} fill="currentColor" />
+                  <Play
+                    size={15}
+                    fill="currentColor"
+                  />
                 </span>
 
                 Watch Trailer
               </button>
 
-              {/* FULL MOVIE */}
-
               <button
                 type="button"
-                disabled={checkingPurchase || paymentLoading || movieLoading}
+                disabled={
+                  checkingPurchase ||
+                  paymentLoading ||
+                  movieLoading
+                }
                 onClick={handleFullMovieClick}
                 className="group relative flex min-h-14 items-center justify-center gap-3 overflow-hidden rounded-xl bg-white px-5 font-semibold text-black transition hover:bg-white/90 active:bg-white/80 disabled:cursor-not-allowed disabled:opacity-60 sm:px-7"
               >
@@ -1035,11 +1103,15 @@ const openMovie = async () => {
                 Secure playback
               </span>
 
-              <span className="hidden sm:inline">•</span>
+              <span className="hidden sm:inline">
+                •
+              </span>
 
               <span>HD / 4K Quality</span>
 
-              <span className="hidden sm:inline">•</span>
+              <span className="hidden sm:inline">
+                •
+              </span>
 
               <span>Premium viewing</span>
             </div>
@@ -1073,28 +1145,34 @@ const openMovie = async () => {
               </h2>
 
               <p className="mt-5 max-w-[760px] text-[15px] leading-7 text-white/55 sm:mt-6 sm:text-base sm:leading-8">
-                Avengers: Doomsday brings together heroes from three
-                distinct universes and places them on a collision course
-                with an existential threat. The film is directed by
-                Anthony Russo and Joe Russo and written by Stephen
-                McFeely.
+                Avengers: Doomsday brings together heroes
+                from three distinct universes and places
+                them on a collision course with an
+                existential threat. The film is directed by
+                Anthony Russo and Joe Russo and written by
+                Stephen McFeely.
               </p>
 
               <p className="mt-5 max-w-[760px] text-[15px] leading-7 text-white/55 sm:text-base sm:leading-8">
-                Robert Downey Jr. returns to the Marvel universe in a
-                new role as Victor von Doom, while a huge ensemble of
-                returning Avengers, Fantastic Four and X-Men characters
-                joins the conflict.
+                Robert Downey Jr. returns to the Marvel
+                universe in a new role as Victor von Doom,
+                while a huge ensemble of returning
+                Avengers, Fantastic Four and X-Men
+                characters joins the conflict.
               </p>
 
               <div className="mt-9 grid max-w-[800px] grid-cols-2 gap-x-6 gap-y-7 sm:mt-10 sm:grid-cols-3 sm:gap-x-8 sm:gap-y-8">
+
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-white/35 sm:text-xs">
                     Rating
                   </p>
 
                   <p className="mt-2 flex items-center gap-2 text-sm text-white/80">
-                    <Star size={15} fill="currentColor" />
+                    <Star
+                      size={15}
+                      fill="currentColor"
+                    />
                     4.3 / 5
                   </p>
                 </div>
@@ -1171,8 +1249,8 @@ const openMovie = async () => {
               </h3>
 
               <p className="mt-3 text-sm leading-6 text-white/45">
-                Your movie experience, built for a clean cinematic watch
-                from start to finish.
+                Your movie experience, built for a clean
+                cinematic watch from start to finish.
               </p>
 
               <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.025] p-4">
@@ -1187,18 +1265,20 @@ const openMovie = async () => {
                     </p>
 
                     <div className="mt-1 flex gap-0.5">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <Star
-                          key={star}
-                          size={13}
-                          fill={
-                            star <= 4
-                              ? "currentColor"
-                              : "none"
-                          }
-                          className="text-white"
-                        />
-                      ))}
+                      {[1, 2, 3, 4, 5].map(
+                        (star) => (
+                          <Star
+                            key={star}
+                            size={13}
+                            fill={
+                              star <= 4
+                                ? "currentColor"
+                                : "none"
+                            }
+                            className="text-white"
+                          />
+                        )
+                      )}
                     </div>
                   </div>
 
@@ -1238,11 +1318,13 @@ const openMovie = async () => {
                 </p>
               </div>
 
-              {/* FULL MOVIE */}
-
               <button
                 type="button"
-                disabled={checkingPurchase || paymentLoading || movieLoading}
+                disabled={
+                  checkingPurchase ||
+                  paymentLoading ||
+                  movieLoading
+                }
                 onClick={handleFullMovieClick}
                 className="mt-7 flex min-h-13 w-full items-center justify-center gap-2 rounded-xl bg-white font-semibold text-black transition hover:bg-white/90 active:bg-white/80 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -1250,8 +1332,6 @@ const openMovie = async () => {
 
                 {fullMovieButtonLabel}
               </button>
-
-              {/* TRAILER */}
 
               <button
                 type="button"
@@ -1275,6 +1355,7 @@ const openMovie = async () => {
         className="scroll-mt-16 border-t border-white/10 bg-[#080808] sm:scroll-mt-20"
       >
         <div className="mx-auto max-w-[1400px] px-4 py-16 sm:px-8 sm:py-20 lg:px-10">
+
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/40 sm:text-xs">
             Cast & Credits
           </p>
@@ -1354,6 +1435,7 @@ const openMovie = async () => {
         className="scroll-mt-16 border-t border-white/10 bg-[#0b0b0b] sm:scroll-mt-20"
       >
         <div className="mx-auto max-w-[900px] px-4 py-16 sm:px-8 sm:py-20">
+
           <div className="text-center">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/40 sm:text-xs">
               Questions
@@ -1395,6 +1477,7 @@ const openMovie = async () => {
 
       <footer className="border-t border-white/10 bg-black">
         <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-4 py-8 text-sm text-white/35 sm:px-8 md:flex-row md:items-center md:justify-between lg:px-10">
+
           <div>
             © 2026 CINEINJAS. All rights reserved.
           </div>
@@ -1428,12 +1511,15 @@ const openMovie = async () => {
           aria-modal="true"
           aria-label="Avengers Doomsday trailer"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
+            if (
+              event.target === event.currentTarget
+            ) {
               closeTrailer();
             }
           }}
         >
           <div className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/90 via-black/50 to-transparent px-4 pb-8 pt-4 sm:px-6 sm:pt-5">
+
             <div className="min-w-0">
               <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-white/45 sm:text-[10px]">
                 Official Trailer
@@ -1456,19 +1542,20 @@ const openMovie = async () => {
 
           <div className="relative flex max-h-[100svh] w-full items-center justify-center">
             <div className="relative w-full max-w-[1280px] overflow-hidden bg-black sm:rounded-2xl sm:border sm:border-white/10">
-             <video
-  ref={trailerVideoRef}
-  className="block aspect-video h-auto max-h-[100svh] w-full object-contain"
-  src={trailerUrl ?? undefined}
-  controls
-  autoPlay
-  playsInline
-  preload="metadata"
-  controlsList="nodownload"
-  onContextMenu={(event) =>
-    event.preventDefault()
-  }
-/>
+
+              <video
+                ref={trailerVideoRef}
+                className="block aspect-video h-auto max-h-[100svh] w-full object-contain"
+                src={trailerUrl ?? undefined}
+                controls
+                autoPlay
+                playsInline
+                preload="metadata"
+                controlsList="nodownload"
+                onContextMenu={(event) =>
+                  event.preventDefault()
+                }
+              />
 
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/20 to-transparent" />
             </div>
@@ -1476,8 +1563,12 @@ const openMovie = async () => {
 
           <div className="pointer-events-none absolute bottom-10 left-0 right-0 z-20 flex justify-center px-3 sm:bottom-12">
             <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/65 px-3 py-1.5 text-[9px] text-white/40 backdrop-blur-xl sm:gap-3 sm:px-4 sm:py-2 sm:text-[10px]">
+
               <span className="flex items-center gap-1.5">
-                <Play size={10} fill="currentColor" />
+                <Play
+                  size={10}
+                  fill="currentColor"
+                />
                 Trailer
               </span>
 
@@ -1510,12 +1601,15 @@ const openMovie = async () => {
           aria-modal="true"
           aria-label="Avengers Doomsday full movie"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
+            if (
+              event.target === event.currentTarget
+            ) {
               closeMovie();
             }
           }}
         >
           <div className="absolute left-0 right-0 top-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/95 via-black/60 to-transparent px-4 pb-10 pt-4 sm:px-6 sm:pt-5">
+
             <div className="min-w-0">
               <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-white/45 sm:text-[10px]">
                 Premium Playback
@@ -1538,16 +1632,19 @@ const openMovie = async () => {
 
           <div className="relative flex max-h-[100svh] w-full items-center justify-center">
             <div className="relative w-full max-w-[1400px] overflow-hidden bg-black sm:rounded-2xl sm:border sm:border-white/10">
-             <video
-  id="full-movie-video"
-  className="block aspect-video h-auto max-h-[100svh] w-full bg-black object-contain"
-  src={movieUrl ?? undefined}
-  controls
-  playsInline
-  preload="metadata"
-  controlsList="nodownload"
-  onContextMenu={(event) => event.preventDefault()}
-/>
+
+              <video
+                id="full-movie-video"
+                className="block aspect-video h-auto max-h-[100svh] w-full bg-black object-contain"
+                src={movieUrl ?? undefined}
+                controls
+                playsInline
+                preload="metadata"
+                controlsList="nodownload"
+                onContextMenu={(event) =>
+                  event.preventDefault()
+                }
+              />
 
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/25 to-transparent" />
             </div>
@@ -1555,6 +1652,7 @@ const openMovie = async () => {
 
           <div className="pointer-events-none absolute bottom-5 left-0 right-0 z-20 flex justify-center px-3 sm:bottom-7">
             <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/70 px-3 py-1.5 text-[9px] text-white/40 backdrop-blur-xl sm:gap-3 sm:px-4 sm:py-2 sm:text-[10px]">
+
               <span className="flex items-center gap-1.5">
                 <BadgeCheck size={11} />
                 Purchased
