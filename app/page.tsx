@@ -938,32 +938,17 @@ export default function Home() {
 
               <button
                 type="button"
-                onClick={openMobileSearch}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-3 font-medium"
-              >
-                <Search size={17} />
-                Search Movies
-              </button>
-
-              <button
-                type="button"
                 onClick={() => {
                   setMenuOpen(false);
-                  router.push(
-                    user ? "/profile" : "/sign-in"
-                  );
+                  router.push(user ? "/profile" : "/sign-in");
                 }}
                 disabled={authLoading}
-                className="mt-1 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white py-3 font-medium text-black disabled:opacity-60"
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white py-3 font-medium text-black disabled:opacity-60"
               >
                 <User size={17} />
-
-                {authLoading
-                  ? "..."
-                  : user
-                  ? "Profile"
-                  : "Sign In"}
+                {authLoading ? "..." : user ? "Profile" : "Sign In"}
               </button>
+
             </nav>
           </div>
         )}
@@ -981,7 +966,7 @@ export default function Home() {
 
           <video
             ref={heroVideoRef}
-            className="absolute inset-0 h-full w-full object-contain sm:object-cover"
+            className="absolute inset-0 h-full w-full object-cover object-[center_25%] sm:object-center"
             src="/trailer.mp4"
             autoPlay
             muted
