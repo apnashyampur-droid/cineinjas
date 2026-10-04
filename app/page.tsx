@@ -966,7 +966,7 @@ export default function Home() {
 
           <video
             ref={heroVideoRef}
-         className="absolute inset-0 h-full w-full object-cover object-[center_25%] scale-[0.9] sm:scale-100 sm:object-center"
+        className="absolute inset-0 h-full w-full object-cover"
             src="/trailer.mp4"
             autoPlay
             muted
