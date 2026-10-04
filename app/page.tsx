@@ -39,14 +39,17 @@ export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
+
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
   const [trailerOpen, setTrailerOpen] = useState(false);
 
   const [movieUnlocked, setMovieUnlocked] = useState(false);
   const [checkingPurchase, setCheckingPurchase] = useState(true);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [movieOpen, setMovieOpen] = useState(false);
+
   const [movieUrl, setMovieUrl] = useState<string | null>(null);
   const [trailerUrl, setTrailerUrl] = useState<string | null>(null);
   const [movieLoading, setMovieLoading] = useState(false);
@@ -67,28 +70,54 @@ export default function Home() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (mounted) {
-        setUser(user);
-        setAuthLoading(false);
-      }
+      if (!mounted) return;
+
+      setUser(user);
+      setAuthLoading(false);
     };
 
     loadUser();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
+    } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (!mounted) return;
 
-      setUser(session?.user ?? null);
-      setAuthLoading(false);
-    });
+        const nextUser = session?.user ?? null;
+
+        setUser(nextUser);
+        setAuthLoading(false);
+
+        /*
+          IMPORTANT:
+          Every auth change re-checks movie ownership.
+
+          This means:
+          - Login  -> purchase status checked
+          - Logout -> purchase state cleared
+          - Session refresh -> purchase status checked again
+        */
+
+        if (!nextUser) {
+          setMovieUnlocked(false);
+          setCheckingPurchase(false);
+          return;
+        }
+
+        await checkMoviePurchase();
+      }
+    );
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
   }, [supabase]);
+
+  /* =========================================================
+     SEARCH
+  ========================================================= */
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
 
@@ -103,36 +132,26 @@ export default function Home() {
   const hasSearch = normalizedQuery.length > 0;
 
   /* =========================================================
-     LOAD RAZORPAY
-  ========================================================= */
-
-  const loadRazorpay = () => {
-    return new Promise<boolean>((resolve) => {
-      if (window.Razorpay) {
-        resolve(true);
-        return;
-      }
-
-      const script = document.createElement("script");
-
-      script.src =
-        "https://checkout.razorpay.com/v1/checkout.js";
-      script.async = true;
-
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-
-      document.body.appendChild(script);
-    });
-  };
-
-  /* =========================================================
      CHECK MOVIE PURCHASE
   ========================================================= */
 
   const checkMoviePurchase = async () => {
     try {
       setCheckingPurchase(true);
+
+      /*
+        If there is no authenticated user, there is
+        no reason to ask the purchase endpoint.
+      */
+
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
+
+      if (!currentUser) {
+        setMovieUnlocked(false);
+        return;
+      }
 
       const response = await fetch(
         `/api/movies/purchase-status?movieId=${encodeURIComponent(
@@ -161,9 +180,23 @@ export default function Home() {
     }
   };
 
+  /*
+    Initial purchase check.
+
+    This runs after the page knows whether a user exists.
+  */
+
   useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      setMovieUnlocked(false);
+      setCheckingPurchase(false);
+      return;
+    }
+
     checkMoviePurchase();
-  }, []);
+  }, [authLoading, user]);
 
   /* =========================================================
      LOAD TRAILER
@@ -200,13 +233,13 @@ export default function Home() {
   ========================================================= */
 
   useEffect(() => {
-    if (searchOpen) {
-      const timer = setTimeout(() => {
-        searchInputRef.current?.focus();
-      }, 120);
+    if (!searchOpen) return;
 
-      return () => clearTimeout(timer);
-    }
+    const timer = setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 120);
+
+    return () => clearTimeout(timer);
   }, [searchOpen]);
 
   /* =========================================================
@@ -257,7 +290,12 @@ export default function Home() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [searchOpen, trailerOpen, menuOpen, movieOpen]);
+  }, [
+    searchOpen,
+    trailerOpen,
+    menuOpen,
+    movieOpen,
+  ]);
 
   /* =========================================================
      BODY SCROLL LOCK
@@ -276,7 +314,7 @@ export default function Home() {
   }, [trailerOpen, movieOpen]);
 
   /* =========================================================
-     SEARCH
+     SEARCH FUNCTIONS
   ========================================================= */
 
   const handleSearchSubmit = () => {
@@ -309,10 +347,36 @@ export default function Home() {
   };
 
   /* =========================================================
+     REQUIRE SIGN IN
+  ========================================================= */
+
+  const requireSignIn = () => {
+    if (authLoading) return false;
+
+    if (!user) {
+      setMenuOpen(false);
+      setSearchOpen(false);
+
+      router.push("/sign-in");
+
+      return false;
+    }
+
+    return true;
+  };
+
+  /* =========================================================
      TRAILER
   ========================================================= */
 
   const openTrailer = () => {
+    /*
+      NEW FLOW:
+      Trailer always requires authentication.
+    */
+
+    if (!requireSignIn()) return;
+
     setMenuOpen(false);
     setSearchOpen(false);
 
@@ -349,19 +413,63 @@ export default function Home() {
   ========================================================= */
 
   const openMovie = async () => {
-    if (!movieUnlocked) return;
+    /*
+      Authentication check first.
+    */
 
-    setMenuOpen(false);
-    setSearchOpen(false);
-    setTrailerOpen(false);
+    if (!requireSignIn()) return;
+
+    /*
+      Always re-check purchase before opening
+      the actual movie stream.
+    */
+
     setMovieLoading(true);
 
     try {
-      const response = await fetch("/api/movies/stream", {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-      });
+      const purchaseResponse = await fetch(
+        `/api/movies/purchase-status?movieId=${encodeURIComponent(
+          MOVIE_ID
+        )}`,
+        {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        }
+      );
+
+      const purchaseData =
+        await purchaseResponse.json();
+
+      if (
+        !purchaseResponse.ok ||
+        !purchaseData.unlocked
+      ) {
+        setMovieUnlocked(false);
+
+        /*
+          User is logged in but has not purchased.
+          Return to payment flow.
+        */
+
+        setMovieLoading(false);
+        return;
+      }
+
+      setMovieUnlocked(true);
+
+      setMenuOpen(false);
+      setSearchOpen(false);
+      setTrailerOpen(false);
+
+      const response = await fetch(
+        "/api/movies/stream",
+        {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        }
+      );
 
       const data = await response.json();
 
@@ -406,6 +514,7 @@ export default function Home() {
     }
 
     setMovieOpen(false);
+    setMovieUrl(null);
 
     setTimeout(() => {
       heroVideoRef.current?.play().catch(() => {});
@@ -413,16 +522,56 @@ export default function Home() {
   };
 
   /* =========================================================
-     RAZORPAY PAYMENT
+     RAZORPAY
+  ========================================================= */
+
+  const loadRazorpay = () => {
+    return new Promise<boolean>((resolve) => {
+      if (window.Razorpay) {
+        resolve(true);
+        return;
+      }
+
+      const script = document.createElement("script");
+
+      script.src =
+        "https://checkout.razorpay.com/v1/checkout.js";
+
+      script.async = true;
+
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+
+      document.body.appendChild(script);
+    });
+  };
+
+  /* =========================================================
+     FULL MOVIE CLICK
   ========================================================= */
 
   const handleFullMovieClick = async () => {
+    /*
+      NEW FLOW:
+      Full movie also requires authentication.
+    */
+
+    if (!requireSignIn()) return;
+
     if (checkingPurchase || paymentLoading) return;
 
+    /*
+      Already purchased -> open movie.
+    */
+
     if (movieUnlocked) {
-      openMovie();
+      await openMovie();
       return;
     }
+
+    /*
+      Logged in but not purchased -> payment.
+    */
 
     setPaymentLoading(true);
 
@@ -462,15 +611,10 @@ export default function Home() {
 
       const options = {
         key: orderData.keyId,
-
         amount: orderData.amount,
-
         currency: orderData.currency,
-
         name: "CINEINJAS",
-
         description: `${MOVIE_TITLE} — Full Movie`,
-
         order_id: orderData.orderId,
 
         theme: {
@@ -522,13 +666,24 @@ export default function Home() {
               );
             }
 
+            /*
+              Payment verified on server.
+            */
+
             setMovieUnlocked(true);
+
+            /*
+              Re-check server-side purchase status
+              before opening the movie.
+            */
+
+            await checkMoviePurchase();
 
             alert(
               "Payment successful! This movie is now unlocked for your account."
             );
 
-            openMovie();
+            await openMovie();
           } catch (error) {
             console.error(
               "Payment verification error:",
@@ -583,7 +738,9 @@ export default function Home() {
      BUTTON LABEL
   ========================================================= */
 
-  const fullMovieButtonLabel = checkingPurchase
+  const fullMovieButtonLabel = authLoading
+    ? "Checking account..."
+    : checkingPurchase
     ? "Checking access..."
     : paymentLoading
     ? "Opening secure payment..."
@@ -593,17 +750,21 @@ export default function Home() {
     ? "Watch Full Movie"
     : "Watch Full Movie · ₹19";
 
+  /* =========================================================
+     RETURN
+  ========================================================= */
+
   return (
     <main className="min-h-[100svh] overflow-x-hidden bg-[#080808] text-white">
 
-      {/* =========================================================
+      {/* =====================================================
           NAVBAR
-      ========================================================= */}
+      ===================================================== */}
 
       <header className="fixed left-0 right-0 top-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-xl">
         <div className="mx-auto flex h-[64px] min-h-[64px] max-w-[1400px] items-center px-4 sm:h-[72px] sm:px-8 lg:px-10 md:justify-between">
 
-          {/* MOBILE MENU — LEFT */}
+          {/* MOBILE MENU */}
 
           <button
             type="button"
@@ -719,6 +880,7 @@ export default function Home() {
               className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm transition hover:bg-white/10 disabled:opacity-60"
             >
               <User size={16} />
+
               {authLoading
                 ? "..."
                 : user
@@ -727,7 +889,7 @@ export default function Home() {
             </button>
           </div>
 
-          {/* MOBILE SEARCH — RIGHT */}
+          {/* MOBILE SEARCH */}
 
           <button
             type="button"
@@ -940,33 +1102,38 @@ export default function Home() {
                 type="button"
                 onClick={() => {
                   setMenuOpen(false);
-                  router.push(user ? "/profile" : "/sign-in");
+                  router.push(
+                    user ? "/profile" : "/sign-in"
+                  );
                 }}
                 disabled={authLoading}
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-white py-3 font-medium text-black disabled:opacity-60"
               >
                 <User size={17} />
-                {authLoading ? "..." : user ? "Profile" : "Sign In"}
-              </button>
 
+                {authLoading
+                  ? "..."
+                  : user
+                  ? "Profile"
+                  : "Sign In"}
+              </button>
             </nav>
           </div>
         )}
       </header>
 
-      {/* =========================================================
+      {/* =====================================================
           HERO
-      ========================================================= */}
+      ===================================================== */}
 
       <section
         id="home"
         className="relative flex min-h-[650px] items-end overflow-hidden pt-[64px] sm:min-h-[790px] sm:pt-[72px]"
       >
         <div className="absolute inset-0 bg-black">
-
           <video
             ref={heroVideoRef}
-        className="absolute inset-0 h-full w-full object-cover object-[center_25%] sm:object-center"
+            className="absolute inset-0 h-full w-full object-cover object-[center_25%] sm:object-center"
             src="/trailer.mp4"
             autoPlay
             muted
@@ -989,7 +1156,6 @@ export default function Home() {
 
         <div className="relative z-10 mx-auto w-full max-w-[1400px] px-4 pb-10 sm:px-8 sm:pb-20 lg:px-10 lg:pb-28">
           <div className="max-w-[900px]">
-
             <div className="mb-5 flex flex-wrap items-center gap-2.5 text-[10px] font-medium uppercase tracking-[0.18em] text-white/55 sm:gap-3 sm:text-xs sm:tracking-[0.22em]">
               <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5">
                 Marvel Studios
@@ -1038,12 +1204,18 @@ export default function Home() {
                 28K+ views
               </span>
 
-              <span>Action · Adventure</span>
+              <span>
+                Action · Adventure
+              </span>
 
-              <span>Feature Film</span>
+              <span>
+                Feature Film
+              </span>
             </div>
 
             <div className="mt-8 grid max-w-[650px] gap-3 sm:mt-9 sm:grid-cols-2">
+
+              {/* TRAILER */}
 
               <button
                 type="button"
@@ -1060,9 +1232,12 @@ export default function Home() {
                 Watch Trailer
               </button>
 
+              {/* FULL MOVIE */}
+
               <button
                 type="button"
                 disabled={
+                  authLoading ||
                   checkingPurchase ||
                   paymentLoading ||
                   movieLoading
@@ -1092,13 +1267,17 @@ export default function Home() {
                 •
               </span>
 
-              <span>HD / 4K Quality</span>
+              <span>
+                HD / 4K Quality
+              </span>
 
               <span className="hidden sm:inline">
                 •
               </span>
 
-              <span>Premium viewing</span>
+              <span>
+                Premium viewing
+              </span>
             </div>
           </div>
         </div>
@@ -1109,9 +1288,9 @@ export default function Home() {
         className="scroll-mt-24"
       />
 
-      {/* =========================================================
+      {/* =====================================================
           MOVIE INFO
-      ========================================================= */}
+      ===================================================== */}
 
       <section
         id="movie"
@@ -1306,6 +1485,7 @@ export default function Home() {
               <button
                 type="button"
                 disabled={
+                  authLoading ||
                   checkingPurchase ||
                   paymentLoading ||
                   movieLoading
@@ -1324,6 +1504,7 @@ export default function Home() {
                 className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] text-sm font-medium text-white/75 transition hover:bg-white/[0.08] hover:text-white active:bg-white/[0.12]"
               >
                 <Play size={16} />
+
                 Watch Trailer
               </button>
             </div>
@@ -1331,9 +1512,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* =========================================================
+      {/* =====================================================
           CAST
-      ========================================================= */}
+      ===================================================== */}
 
       <section
         id="details"
@@ -1351,10 +1532,22 @@ export default function Home() {
 
           <div className="mt-8 grid gap-3 sm:mt-10 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              ["Directors", "Anthony Russo · Joe Russo"],
-              ["Written by", "Stephen McFeely"],
-              ["Produced by", "Kevin Feige · Louis D’Esposito"],
-              ["Studio", "Marvel Studios"],
+              [
+                "Directors",
+                "Anthony Russo · Joe Russo",
+              ],
+              [
+                "Written by",
+                "Stephen McFeely",
+              ],
+              [
+                "Produced by",
+                "Kevin Feige · Louis D’Esposito",
+              ],
+              [
+                "Studio",
+                "Marvel Studios",
+              ],
             ].map(([title, value]) => (
               <div
                 key={title}
@@ -1411,9 +1604,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* =========================================================
+      {/* =====================================================
           FAQ
-      ========================================================= */}
+      ===================================================== */}
 
       <section
         id="faq"
@@ -1456,9 +1649,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* =========================================================
+      {/* =====================================================
           FOOTER
-      ========================================================= */}
+      ===================================================== */}
 
       <footer className="border-t border-white/10 bg-black">
         <div className="mx-auto flex max-w-[1400px] flex-col gap-5 px-4 py-8 text-sm text-white/35 sm:px-8 md:flex-row md:items-center md:justify-between lg:px-10">
@@ -1485,11 +1678,11 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* =========================================================
+      {/* =====================================================
           TRAILER MODAL
-      ========================================================= */}
+      ===================================================== */}
 
-      {trailerOpen && (
+      {trailerOpen && user && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black p-0 sm:p-4"
           role="dialog"
@@ -1527,7 +1720,6 @@ export default function Home() {
 
           <div className="relative flex max-h-[100svh] w-full items-center justify-center">
             <div className="relative w-full max-w-[1280px] overflow-hidden bg-black sm:rounded-2xl sm:border sm:border-white/10">
-
               <video
                 ref={trailerVideoRef}
                 className="block aspect-video h-auto max-h-[100svh] w-full object-contain"
@@ -1575,11 +1767,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* =========================================================
+      {/* =====================================================
           FULL MOVIE MODAL
-      ========================================================= */}
+      ===================================================== */}
 
-      {movieOpen && movieUnlocked && (
+      {movieOpen && movieUnlocked && user && (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center bg-black p-0 sm:p-4"
           role="dialog"
@@ -1617,7 +1809,6 @@ export default function Home() {
 
           <div className="relative flex max-h-[100svh] w-full items-center justify-center">
             <div className="relative w-full max-w-[1400px] overflow-hidden bg-black sm:rounded-2xl sm:border sm:border-white/10">
-
               <video
                 id="full-movie-video"
                 className="block aspect-video h-auto max-h-[100svh] w-full bg-black object-contain"
@@ -1645,7 +1836,9 @@ export default function Home() {
 
               <span className="h-3 w-px bg-white/15" />
 
-              <span>Premium viewing</span>
+              <span>
+                Premium viewing
+              </span>
             </div>
           </div>
         </div>
