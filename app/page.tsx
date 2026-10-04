@@ -25,7 +25,6 @@ import {
 const MOVIE_ID = "avengers-doomsday";
 const MOVIE_TITLE = "Avengers: Doomsday";
 const MOVIE_PRICE = 19;
-const FULL_MOVIE_URL = "/avengers-doomsday.mp4";
 
 declare global {
   interface Window {
@@ -45,9 +44,12 @@ export default function Home() {
   const [trailerOpen, setTrailerOpen] = useState(false);
 
   const [movieUnlocked, setMovieUnlocked] = useState(false);
-  const [checkingPurchase, setCheckingPurchase] = useState(true);
-  const [paymentLoading, setPaymentLoading] = useState(false);
-  const [movieOpen, setMovieOpen] = useState(false);
+const [checkingPurchase, setCheckingPurchase] = useState(true);
+const [paymentLoading, setPaymentLoading] = useState(false);
+const [movieOpen, setMovieOpen] = useState(false);
+const [movieUrl, setMovieUrl] = useState<string | null>(null);
+const [trailerUrl, setTrailerUrl] = useState<string | null>(null);
+const [movieLoading, setMovieLoading] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   const heroVideoRef = useRef<HTMLVideoElement>(null);
@@ -161,6 +163,32 @@ export default function Home() {
   useEffect(() => {
     checkMoviePurchase();
   }, []);
+
+  useEffect(() => {
+  const loadTrailer = async () => {
+    try {
+      const response = await fetch("/api/trailer", {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.url) {
+        throw new Error(
+          data?.error || "Unable to load trailer."
+        );
+      }
+
+      setTrailerUrl(data.url);
+    } catch (error) {
+      console.error("Trailer loading error:", error);
+      setTrailerUrl(null);
+    }
+  };
+
+  loadTrailer();
+}, []);
 
   /* =========================================================
      SEARCH AUTO FOCUS
@@ -313,10 +341,30 @@ export default function Home() {
      OPEN UNLOCKED MOVIE
   ========================================================= */
 
-  const openMovie = () => {
-    setMenuOpen(false);
-    setSearchOpen(false);
-    setTrailerOpen(false);
+const openMovie = async () => {
+  if (!movieUnlocked) return;
+
+  setMenuOpen(false);
+  setSearchOpen(false);
+  setTrailerOpen(false);
+  setMovieLoading(true);
+
+  try {
+    const response = await fetch("/api/movies/stream", {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.url) {
+      throw new Error(
+        data?.error || "Unable to start secure movie playback."
+      );
+    }
+
+    setMovieUrl(data.url);
     setMovieOpen(true);
 
     setTimeout(() => {
@@ -325,8 +373,19 @@ export default function Home() {
       ) as HTMLVideoElement | null;
 
       video?.play().catch(() => {});
-    }, 150);
-  };
+    }, 200);
+  } catch (error) {
+    console.error("Movie playback error:", error);
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Unable to open the movie."
+    );
+  } finally {
+    setMovieLoading(false);
+  }
+};
 
   const closeMovie = () => {
     const video = document.getElementById(
@@ -533,12 +592,14 @@ export default function Home() {
   ========================================================= */
 
   const fullMovieButtonLabel = checkingPurchase
-    ? "Checking access..."
-    : paymentLoading
-    ? "Opening secure payment..."
-    : movieUnlocked
-    ? "Watch Full Movie"
-    : "Watch Full Movie · ₹19";
+  ? "Checking access..."
+  : paymentLoading
+  ? "Opening secure payment..."
+  : movieLoading
+  ? "Opening secure movie..."
+  : movieUnlocked
+  ? "Watch Full Movie"
+  : "Watch Full Movie · ₹19";
 
   return (
     <main className="min-h-[100svh] overflow-x-hidden bg-[#080808] text-white">
@@ -952,7 +1013,7 @@ export default function Home() {
 
               <button
                 type="button"
-                disabled={checkingPurchase || paymentLoading}
+                disabled={checkingPurchase || paymentLoading || movieLoading}
                 onClick={handleFullMovieClick}
                 className="group relative flex min-h-14 items-center justify-center gap-3 overflow-hidden rounded-xl bg-white px-5 font-semibold text-black transition hover:bg-white/90 active:bg-white/80 disabled:cursor-not-allowed disabled:opacity-60 sm:px-7"
               >
@@ -1181,7 +1242,7 @@ export default function Home() {
 
               <button
                 type="button"
-                disabled={checkingPurchase || paymentLoading}
+                disabled={checkingPurchase || paymentLoading || movieLoading}
                 onClick={handleFullMovieClick}
                 className="mt-7 flex min-h-13 w-full items-center justify-center gap-2 rounded-xl bg-white font-semibold text-black transition hover:bg-white/90 active:bg-white/80 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -1395,19 +1456,19 @@ export default function Home() {
 
           <div className="relative flex max-h-[100svh] w-full items-center justify-center">
             <div className="relative w-full max-w-[1280px] overflow-hidden bg-black sm:rounded-2xl sm:border sm:border-white/10">
-              <video
-                ref={trailerVideoRef}
-                className="block aspect-video h-auto max-h-[100svh] w-full object-contain"
-                src="/trailer-full.mp4"
-                controls
-                autoPlay
-                playsInline
-                preload="metadata"
-                controlsList="nodownload"
-                onContextMenu={(event) =>
-                  event.preventDefault()
-                }
-              />
+             <video
+  ref={trailerVideoRef}
+  className="block aspect-video h-auto max-h-[100svh] w-full object-contain"
+  src={trailerUrl ?? undefined}
+  controls
+  autoPlay
+  playsInline
+  preload="metadata"
+  controlsList="nodownload"
+  onContextMenu={(event) =>
+    event.preventDefault()
+  }
+/>
 
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/20 to-transparent" />
             </div>
@@ -1477,18 +1538,16 @@ export default function Home() {
 
           <div className="relative flex max-h-[100svh] w-full items-center justify-center">
             <div className="relative w-full max-w-[1400px] overflow-hidden bg-black sm:rounded-2xl sm:border sm:border-white/10">
-              <video
-                id="full-movie-video"
-                className="block aspect-video h-auto max-h-[100svh] w-full bg-black object-contain"
-                src={FULL_MOVIE_URL}
-                controls
-                playsInline
-                preload="metadata"
-                controlsList="nodownload"
-                onContextMenu={(event) =>
-                  event.preventDefault()
-                }
-              />
+             <video
+  id="full-movie-video"
+  className="block aspect-video h-auto max-h-[100svh] w-full bg-black object-contain"
+  src={movieUrl ?? undefined}
+  controls
+  playsInline
+  preload="metadata"
+  controlsList="nodownload"
+  onContextMenu={(event) => event.preventDefault()}
+/>
 
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/25 to-transparent" />
             </div>
