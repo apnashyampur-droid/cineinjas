@@ -463,24 +463,24 @@ export default function Home() {
       setTrailerOpen(false);
 
       const response = await fetch(
-        "/api/movies/stream",
-        {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        }
-      );
+  "/api/movies/stream",
+  {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  }
+);
 
-      const data = await response.json();
+const data = await response.json();
 
-      if (!response.ok || !data.url) {
-        throw new Error(
-          data?.error ||
-            "Unable to start secure movie playback."
-        );
-      }
+if (!response.ok || !data.url) {
+  throw new Error(
+    data?.error ||
+      "Unable to start secure movie playback."
+  );
+}
 
-      setMovieUrl(data.url);
+setMovieUrl(data.url);
       setMovieOpen(true);
 
       setTimeout(() => {
