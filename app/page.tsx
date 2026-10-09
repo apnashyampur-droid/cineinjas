@@ -24,13 +24,6 @@ import {
 
 const MOVIE_ID = "avengers-doomsday";
 const MOVIE_TITLE = "Avengers: Doomsday";
-const MOVIE_PRICE = 19;
-
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
-}
 
 export default function Home() {
   const router = useRouter();
@@ -45,9 +38,7 @@ export default function Home() {
 
   const [trailerOpen, setTrailerOpen] = useState(false);
 
-  const [movieUnlocked, setMovieUnlocked] = useState(false);
-  const [checkingPurchase, setCheckingPurchase] = useState(true);
-  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [movieUnlocked, setMovieUnlocked] = useState(true);
   const [movieOpen, setMovieOpen] = useState(false);
 
   const [movieUrl, setMovieUrl] = useState<string | null>(null);
@@ -89,23 +80,8 @@ export default function Home() {
         setUser(nextUser);
         setAuthLoading(false);
 
-        /*
-          IMPORTANT:
-          Every auth change re-checks movie ownership.
-
-          This means:
-          - Login  -> purchase status checked
-          - Logout -> purchase state cleared
-          - Session refresh -> purchase status checked again
-        */
-
-        if (!nextUser) {
-          setMovieUnlocked(false);
-          setCheckingPurchase(false);
-          return;
-        }
-
-        await checkMoviePurchase();
+        // Full movie access is free for signed-in users.
+        setMovieUnlocked(Boolean(nextUser));
       }
     );
 
@@ -130,73 +106,6 @@ export default function Home() {
       "marvel".includes(normalizedQuery));
 
   const hasSearch = normalizedQuery.length > 0;
-
-  /* =========================================================
-     CHECK MOVIE PURCHASE
-  ========================================================= */
-
-  const checkMoviePurchase = async () => {
-    try {
-      setCheckingPurchase(true);
-
-      /*
-        If there is no authenticated user, there is
-        no reason to ask the purchase endpoint.
-      */
-
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
-
-      if (!currentUser) {
-        setMovieUnlocked(false);
-        return;
-      }
-
-      const response = await fetch(
-        `/api/movies/purchase-status?movieId=${encodeURIComponent(
-          MOVIE_ID
-        )}`,
-        {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        }
-      );
-
-      if (!response.ok) {
-        setMovieUnlocked(false);
-        return;
-      }
-
-      const data = await response.json();
-
-      setMovieUnlocked(Boolean(data.unlocked));
-    } catch (error) {
-      console.error("Purchase status error:", error);
-      setMovieUnlocked(false);
-    } finally {
-      setCheckingPurchase(false);
-    }
-  };
-
-  /*
-    Initial purchase check.
-
-    This runs after the page knows whether a user exists.
-  */
-
-  useEffect(() => {
-    if (authLoading) return;
-
-    if (!user) {
-      setMovieUnlocked(false);
-      setCheckingPurchase(false);
-      return;
-    }
-
-    checkMoviePurchase();
-  }, [authLoading, user]);
 
   /* =========================================================
      LOAD TRAILER
@@ -409,94 +318,43 @@ export default function Home() {
   };
 
   /* =========================================================
-     OPEN UNLOCKED MOVIE
+     OPEN FREE MOVIE — CLOUDFLARE R2
   ========================================================= */
 
   const openMovie = async () => {
-    /*
-      Authentication check first.
-    */
-
     if (!requireSignIn()) return;
-
-    /*
-      Always re-check purchase before opening
-      the actual movie stream.
-    */
+    if (movieLoading) return;
 
     setMovieLoading(true);
 
     try {
-      const purchaseResponse = await fetch(
-        `/api/movies/purchase-status?movieId=${encodeURIComponent(
-          MOVIE_ID
-        )}`,
-        {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        }
-      );
+      const response = await fetch("/api/movies/stream", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
 
-      const purchaseData =
-        await purchaseResponse.json();
+      const data = await response.json();
 
-      if (
-        !purchaseResponse.ok ||
-        !purchaseData.unlocked
-      ) {
-        setMovieUnlocked(false);
-
-        /*
-          User is logged in but has not purchased.
-          Return to payment flow.
-        */
-
-        setMovieLoading(false);
-        return;
+      if (!response.ok || !data.url) {
+        throw new Error(
+          data?.error || "Unable to start movie playback."
+        );
       }
 
+      setMovieUrl(data.url);
       setMovieUnlocked(true);
-
       setMenuOpen(false);
       setSearchOpen(false);
       setTrailerOpen(false);
-
-      const response = await fetch(
-  "/api/movies/stream",
-  {
-    method: "GET",
-    credentials: "include",
-    cache: "no-store",
-  }
-);
-
-const data = await response.json();
-
-if (!response.ok || !data.url) {
-  throw new Error(
-    data?.error ||
-      "Unable to start secure movie playback."
-  );
-}
-
-setMovieUrl(data.url);
       setMovieOpen(true);
-
-      setTimeout(() => {
-        const video = document.getElementById(
-          "full-movie-video"
-        ) as HTMLVideoElement | null;
-
-        video?.play().catch(() => {});
-      }, 200);
     } catch (error) {
       console.error("Movie playback error:", error);
 
       alert(
         error instanceof Error
           ? error.message
-          : "Unable to open the movie."
+          : "Unable to open the movie. Please try again."
       );
     } finally {
       setMovieLoading(false);
@@ -522,216 +380,13 @@ setMovieUrl(data.url);
   };
 
   /* =========================================================
-     RAZORPAY
-  ========================================================= */
-
-  const loadRazorpay = () => {
-    return new Promise<boolean>((resolve) => {
-      if (window.Razorpay) {
-        resolve(true);
-        return;
-      }
-
-      const script = document.createElement("script");
-
-      script.src =
-        "https://checkout.razorpay.com/v1/checkout.js";
-
-      script.async = true;
-
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-
-      document.body.appendChild(script);
-    });
-  };
-
-  /* =========================================================
-     FULL MOVIE CLICK
+     FREE FULL MOVIE
   ========================================================= */
 
   const handleFullMovieClick = async () => {
-    /*
-      NEW FLOW:
-      Full movie also requires authentication.
-    */
-
     if (!requireSignIn()) return;
-
-    if (checkingPurchase || paymentLoading) return;
-
-    /*
-      Already purchased -> open movie.
-    */
-
-    if (movieUnlocked) {
-      await openMovie();
-      return;
-    }
-
-    /*
-      Logged in but not purchased -> payment.
-    */
-
-    setPaymentLoading(true);
-
-    try {
-      const razorpayLoaded = await loadRazorpay();
-
-      if (!razorpayLoaded) {
-        alert(
-          "Unable to load secure payment checkout. Please check your internet connection and try again."
-        );
-
-        return;
-      }
-
-      const orderResponse = await fetch(
-        "/api/movies/create-order",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            movieId: MOVIE_ID,
-          }),
-        }
-      );
-
-      const orderData = await orderResponse.json();
-
-      if (!orderResponse.ok) {
-        throw new Error(
-          orderData?.error ||
-            "Unable to create payment order."
-        );
-      }
-
-      const options = {
-        key: orderData.keyId,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: "CINEINJAS",
-        description: `${MOVIE_TITLE} — Full Movie`,
-        order_id: orderData.orderId,
-
-        theme: {
-          color: "#111111",
-        },
-
-        modal: {
-          ondismiss: () => {
-            setPaymentLoading(false);
-          },
-        },
-
-        handler: async (response: {
-          razorpay_payment_id: string;
-          razorpay_order_id: string;
-          razorpay_signature: string;
-        }) => {
-          try {
-            const verifyResponse = await fetch(
-              "/api/movies/verify-payment",
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                credentials: "include",
-                body: JSON.stringify({
-                  movieId: MOVIE_ID,
-                  razorpayPaymentId:
-                    response.razorpay_payment_id,
-                  razorpayOrderId:
-                    response.razorpay_order_id,
-                  razorpaySignature:
-                    response.razorpay_signature,
-                }),
-              }
-            );
-
-            const verifyData =
-              await verifyResponse.json();
-
-            if (
-              !verifyResponse.ok ||
-              !verifyData.success
-            ) {
-              throw new Error(
-                verifyData?.error ||
-                  "Payment verification failed."
-              );
-            }
-
-            /*
-              Payment verified on server.
-            */
-
-            setMovieUnlocked(true);
-
-            /*
-              Re-check server-side purchase status
-              before opening the movie.
-            */
-
-            await checkMoviePurchase();
-
-            alert(
-              "Payment successful! This movie is now unlocked for your account."
-            );
-
-            await openMovie();
-          } catch (error) {
-            console.error(
-              "Payment verification error:",
-              error
-            );
-
-            alert(
-              "Payment was received, but verification is still pending. Please refresh and check your movie access."
-            );
-
-            await checkMoviePurchase();
-          } finally {
-            setPaymentLoading(false);
-          }
-        },
-      };
-
-      const razorpay = new window.Razorpay(options);
-
-      razorpay.on(
-        "payment.failed",
-        (response: any) => {
-          console.error(
-            "Razorpay payment failed:",
-            response
-          );
-
-          alert(
-            response?.error?.description ||
-              "Payment failed. Please try again."
-          );
-
-          setPaymentLoading(false);
-        }
-      );
-
-      razorpay.open();
-    } catch (error) {
-      console.error("Payment error:", error);
-
-      alert(
-        error instanceof Error
-          ? error.message
-          : "Something went wrong while opening payment."
-      );
-
-      setPaymentLoading(false);
-    }
+    if (movieLoading) return;
+    await openMovie();
   };
 
   /* =========================================================
@@ -740,15 +395,9 @@ setMovieUrl(data.url);
 
   const fullMovieButtonLabel = authLoading
     ? "Checking account..."
-    : checkingPurchase
-    ? "Checking access..."
-    : paymentLoading
-    ? "Opening secure payment..."
     : movieLoading
-    ? "Opening secure movie..."
-    : movieUnlocked
-    ? "Watch Full Movie"
-    : "Watch Full Movie · ₹19";
+    ? "Opening movie..."
+    : "Watch Full Movie";
 
   /* =========================================================
      RETURN
@@ -1238,8 +887,6 @@ setMovieUrl(data.url);
                 type="button"
                 disabled={
                   authLoading ||
-                  checkingPurchase ||
-                  paymentLoading ||
                   movieLoading
                 }
                 onClick={handleFullMovieClick}
@@ -1486,8 +1133,6 @@ setMovieUrl(data.url);
                 type="button"
                 disabled={
                   authLoading ||
-                  checkingPurchase ||
-                  paymentLoading ||
                   movieLoading
                 }
                 onClick={handleFullMovieClick}
@@ -1789,7 +1434,7 @@ setMovieUrl(data.url);
 
             <div className="min-w-0">
               <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-white/45 sm:text-[10px]">
-                Premium Playback
+                Free Movie Playback
               </p>
 
               <p className="mt-1 truncate text-sm font-medium text-white/90 sm:text-base">
@@ -1831,7 +1476,7 @@ setMovieUrl(data.url);
 
               <span className="flex items-center gap-1.5">
                 <BadgeCheck size={11} />
-                Purchased
+                Free Access
               </span>
 
               <span className="h-3 w-px bg-white/15" />
