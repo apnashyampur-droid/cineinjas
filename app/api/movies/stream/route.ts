@@ -1,11 +1,13 @@
+
 import { NextResponse } from "next/server";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 
-const MOVIE_ID = "avengers-doomsday";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const MOVIE_OBJECT_KEY = "movies/avengers-doomsday.mp4";
 
 function getR2Client() {
@@ -29,10 +31,7 @@ function getR2Client() {
 
 export async function GET() {
   try {
-    // ---------------------------------------------------------
-    // 1. Verify signed-in user
-    // ---------------------------------------------------------
-
+    // Verify that the visitor is signed in.
     const supabase = await createClient();
 
     const {
@@ -44,54 +43,13 @@ export async function GET() {
       return NextResponse.json(
         {
           success: false,
-          error: "You must be signed in.",
+          error: "Please sign in to watch the movie.",
         },
         { status: 401 }
       );
     }
 
-    // ---------------------------------------------------------
-    // 2. Verify paid movie purchase
-    // ---------------------------------------------------------
-
-    const adminSupabase = createAdminClient();
-
-    const { data: purchase, error: purchaseError } =
-      await adminSupabase
-        .from("movie_purchases")
-        .select("id, status")
-        .eq("user_id", user.id)
-        .eq("movie_id", MOVIE_ID)
-        .eq("status", "paid")
-        .limit(1)
-        .maybeSingle();
-
-    if (purchaseError) {
-      console.error("Movie purchase lookup error:", purchaseError);
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unable to verify movie access.",
-        },
-        { status: 500 }
-      );
-    }
-
-    if (!purchase) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Movie purchase required.",
-        },
-        { status: 403 }
-      );
-    }
-
-    // ---------------------------------------------------------
-    // 3. Validate R2 configuration
-    // ---------------------------------------------------------
-
+    // The movie is free. No purchase or Razorpay check is required.
     const bucketName = process.env.R2_BUCKET_NAME;
 
     if (!bucketName) {
@@ -106,19 +64,7 @@ export async function GET() {
       );
     }
 
-    // ---------------------------------------------------------
-    // 4. Create R2 client
-    // ---------------------------------------------------------
-
     const r2 = getR2Client();
-
-    // ---------------------------------------------------------
-    // 5. Create a temporary signed URL
-    //
-    // IMPORTANT:
-    // We DO NOT download the movie here.
-    // The browser will download/stream it directly from R2.
-    // ---------------------------------------------------------
 
     const command = new GetObjectCommand({
       Bucket: bucketName,
@@ -132,21 +78,25 @@ export async function GET() {
       expiresIn: 60 * 60,
     });
 
-    return NextResponse.json({
-      success: true,
-      url: signedUrl,
-      expiresIn: 60 * 60,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        url: signedUrl,
+        expiresIn: 60 * 60,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
   } catch (error) {
     console.error("Movie stream URL error:", error);
 
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unable to create movie playback URL.",
+        error: "Unable to open the movie. Please try again.",
       },
       { status: 500 }
     );
